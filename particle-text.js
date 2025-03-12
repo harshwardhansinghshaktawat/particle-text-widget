@@ -2,14 +2,17 @@ class ParticleText extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this.particles = [];
+    this.scene = null;
+    this.camera = null;
+    this.renderer = null;
+    this.particles = null;
     this.animationFrame = null;
   }
 
   static get observedAttributes() {
     return [
       'text', 'particle-speed', 'particle-density', 'particle-color',
-      'font-size', 'background-color', 'font-color', 'font-family'
+      'font-size', 'background-color', 'font-family'
     ];
   }
 
@@ -27,82 +30,106 @@ class ParticleText extends HTMLElement {
     if (this.animationFrame) {
       cancelAnimationFrame(this.animationFrame);
     }
-  }
-
-  // Initialize particles based on centered text outline
-  initParticles(ctx, text, fontSize, fontFamily, density) {
-    const canvasWidth = ctx.canvas.width;
-    const canvasHeight = ctx.canvas.height;
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-
-    // Set font and measure text
-    const fontSizePx = fontSize * window.innerWidth / 100; // Convert vw to px
-    ctx.font = `${fontSizePx}px ${fontFamily}, serif`;
-    const textMetrics = ctx.measureText(text);
-    const textWidth = textMetrics.width;
-    const textHeight = fontSizePx; // Approximate height
-
-    // Center the text on the canvas
-    const xOffset = (canvasWidth - textWidth) / 2;
-    const yOffset = (canvasHeight + textHeight) / 2; // Center vertically
-
-    // Draw text temporarily to get outline
-    ctx.fillStyle = 'white'; // Temporary for outline detection
-    ctx.fillText(text, xOffset, yOffset);
-
-    const imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight).data;
-    this.particles = [];
-    const step = Math.max(1, Math.floor(10 / density)); // Adjust density
-
-    for (let y = 0; y < canvasHeight; y += step) {
-      for (let x = 0; x < canvasWidth; x += step) {
-        const i = (y * canvasWidth + x) * 4;
-        if (imageData[i + 3] > 128) { // Alpha > 50% indicates text pixel
-          this.particles.push({
-            x: x + (Math.random() - 0.5) * 5,
-            y: y + (Math.random() - 0.5) * 5,
-            baseX: x,
-            baseY: y,
-            size: Math.random() * 2 + 1,
-            speedX: (Math.random() - 0.5) * 0.5,
-            speedY: (Math.random() - 0.5) * 0.5,
-            life: Math.random() * 2 + 1,
-            maxLife: Math.random() * 2 + 1
-          });
-        }
-      }
+    if (this.renderer) {
+      this.renderer.dispose();
     }
-
-    // Clear the temporary text
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
   }
 
-  // Animate particles
-  animateParticles(ctx, particleSpeed, particleColor) {
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  async initScene(text, particleSpeed, particleDensity, particleColor, fontSize, backgroundColor, fontFamily) {
+    const THREE = window.THREE;
 
-    this.particles.forEach(p => {
-      p.x += p.speedX * particleSpeed;
-      p.y += p.speedY * particleSpeed;
-      p.life -= 0.02 * particleSpeed;
+    // Scene setup
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    this.camera.position.z = 50;
 
-      // Reset particle when life expires
-      if (p.life <= 0) {
-        p.x = p.baseX + (Math.random() - 0.5) * 5;
-        p.y = p.baseY + (Math.random() - 0.5) * 5;
-        p.life = p.maxLife;
-      }
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setClearColor(backgroundColor);
+    this.shadowRoot.querySelector('#canvas-container').appendChild(this.renderer.domElement);
 
-      // Draw particle with glow
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fillStyle = particleColor;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = particleColor;
-      ctx.fill();
+    // Load font
+    const fontLoader = new THREE.FontLoader();
+    const font = await new Promise((resolve) => {
+      fontLoader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', resolve);
     });
 
-    this.animationFrame = requestAnimationFrame(() => this.animateParticles(ctx, particleSpeed, particleColor));
+    // Create text geometry
+    const geometry = new THREE.TextGeometry(text, {
+      font: font,
+      size: fontSize * 5, // Scale vw to reasonable 3D units
+      height: 1,
+      curveSegments: 12,
+      bevelEnabled: false
+    });
+
+    // Center geometry
+    geometry.computeBoundingBox();
+    const boundingBox = geometry.boundingBox;
+    const centerOffset = new THREE.Vector3();
+    boundingBox.getCenter(centerOffset).negate();
+    geometry.translate(centerOffset.x, centerOffset.y, centerOffset.z);
+
+    // Extract particle positions from vertices
+    const positions = geometry.attributes.position.array;
+    const particleCount = Math.floor(positions.length / 3 * particleDensity);
+    const particlePositions = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+      const index = Math.floor(Math.random() * (positions.length / 3)) * 3;
+      particlePositions[i * 3] = positions[index] + (Math.random() - 0.5) * 2;
+      particlePositions[i * 3 + 1] = positions[index + 1] + (Math.random() - 0.5) * 2;
+      particlePositions[i * 3 + 2] = positions[index + 2] + (Math.random() - 0.5) * 2;
+    }
+
+    // Particle geometry and material
+    const particleGeometry = new THREE.BufferGeometry();
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+
+    const particleMaterial = new THREE.PointsMaterial({
+      color: particleColor,
+      size: 0.5,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true
+    });
+
+    // Create particle system
+    this.particles = new THREE.Points(particleGeometry, particleMaterial);
+    this.scene.add(this.particles);
+
+    // Animation
+    const animate = () => {
+      const positions = this.particles.geometry.attributes.position.array;
+      for (let i = 0; i < particleCount; i++) {
+        positions[i * 3] += (Math.random() - 0.5) * particleSpeed * 0.1;
+        positions[i * 3 + 1] += (Math.random() - 0.5) * particleSpeed * 0.1;
+        positions[i * 3 + 2] += (Math.random() - 0.5) * particleSpeed * 0.1;
+
+        // Reset to base position if too far
+        const dx = positions[i * 3] - particlePositions[i * 3];
+        const dy = positions[i * 3 + 1] - particlePositions[i * 3 + 1];
+        const dz = positions[i * 3 + 2] - particlePositions[i * 3 + 2];
+        if (Math.sqrt(dx * dx + dy * dy + dz * dz) > 5) {
+          positions[i * 3] = particlePositions[i * 3];
+          positions[i * 3 + 1] = particlePositions[i * 3 + 1];
+          positions[i * 3 + 2] = particlePositions[i * 3 + 2];
+        }
+      }
+      this.particles.geometry.attributes.position.needsUpdate = true;
+
+      this.renderer.render(this.scene, this.camera);
+      this.animationFrame = requestAnimationFrame(animate);
+    };
+    animate();
+
+    // Handle resize
+    window.onresize = () => {
+      this.camera.aspect = window.innerWidth / window.innerHeight;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+    };
   }
 
   render() {
@@ -115,51 +142,35 @@ class ParticleText extends HTMLElement {
     const backgroundColor = this.getAttribute('background-color') || '#1A1A1A'; // Dark gray
     const fontFamily = this.getAttribute('font-family') || 'Playfair Display';
 
-    // Inject HTML and CSS into shadow DOM (no text overlay)
+    // Inject HTML and CSS into shadow DOM
     this.shadowRoot.innerHTML = `
       <style>
         :host {
           width: 100vw;
           height: 100vh;
           margin: 0;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          background: ${backgroundColor};
+          display: block;
           overflow: hidden;
         }
 
-        canvas {
-          display: block;
+        #canvas-container {
+          width: 100%;
+          height: 100%;
         }
       </style>
-      <canvas></canvas>
+      <div id="canvas-container"></div>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
     `;
 
-    const canvas = this.shadowRoot.querySelector('canvas');
-    const ctx = canvas.getContext('2d');
-    
-    // Set canvas size
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    // Initialize particles
-    this.initParticles(ctx, text, parseFloat(fontSize), fontFamily, particleDensity);
-
-    // Clear previous animation
-    if (this.animationFrame) {
-      cancelAnimationFrame(this.animationFrame);
-    }
-
-    // Start animation
-    this.animateParticles(ctx, particleSpeed, particleColor);
-
-    // Handle resize
-    window.onresize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      this.initParticles(ctx, text, parseFloat(fontSize), fontFamily, particleDensity);
+    // Wait for Three.js to load, then initialize
+    const checkThree = () => {
+      if (window.THREE) {
+        this.initScene(text, particleSpeed, particleDensity, particleColor, parseFloat(fontSize), backgroundColor, fontFamily);
+      } else {
+        setTimeout(checkThree, 100);
+      }
     };
+    checkThree();
   }
 }
 
