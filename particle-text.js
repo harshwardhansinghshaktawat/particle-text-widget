@@ -5,10 +5,12 @@ class ParticleText extends HTMLElement {
     this.particles = [];
     this.amount = 0;
     this.animationFrameId = null;
+    this.mouse = { x: -9999, y: -9999 }; // Default off-screen
+    this.radius = 70; // Mouse interaction radius
   }
 
   static get observedAttributes() {
-    return ['text', 'font-size', 'background-color', 'particle-color', 'text-color', 'font-family'];
+    return ['text', 'font-size', 'background-color', 'particle-color', 'font-family'];
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
@@ -25,13 +27,15 @@ class ParticleText extends HTMLElement {
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
     }
+    window.removeEventListener('mousemove', this.mouseMoveHandler);
+    window.removeEventListener('resize', this.resizeHandler);
   }
 
   initParticles(ctx, ww, wh) {
     const text = this.getAttribute('text') || 'Shine';
     const fontSize = parseFloat(this.getAttribute('font-size')) || 5; // In vw
     const fontFamily = this.getAttribute('font-family') || 'Cinzel';
-    const density = 450; // Hardcoded density (higher = fewer particles)
+    const density = 450; // Hardcoded density
 
     ctx.clearRect(0, 0, ww, wh);
     ctx.font = `400 ${fontSize}vw ${fontFamily}, serif`;
@@ -60,7 +64,7 @@ class ParticleText extends HTMLElement {
 
     ctx.clearRect(0, 0, ww, wh);
     for (let i = 0; i < this.amount; i++) {
-      this.particles[i].render(ctx);
+      this.particles[i].render(ctx, this.mouse, this.radius);
     }
 
     this.animationFrameId = requestAnimationFrame(() => this.renderAnimation());
@@ -69,8 +73,7 @@ class ParticleText extends HTMLElement {
   render() {
     // Get attribute values with fallbacks
     const backgroundColor = this.getAttribute('background-color') || '#1A2533'; // Midnight blue
-    const textColor = this.getAttribute('text-color') || '#D8DEE9'; // Soft silver
-    const particleColor = this.getAttribute('particle-color') || '#FFD700'; // Golden
+    const particleColor = this.getAttribute('particle-color') || '#66D9EF'; // Soft cyan
 
     // Inject HTML and CSS into shadow DOM
     this.shadowRoot.innerHTML = `
@@ -109,6 +112,14 @@ class ParticleText extends HTMLElement {
       this.initParticles(ctx, canvas.width, canvas.height);
     };
     window.addEventListener('resize', this.resizeHandler);
+
+    // Handle mouse movement
+    window.removeEventListener('mousemove', this.mouseMoveHandler);
+    this.mouseMoveHandler = (e) => {
+      this.mouse.x = e.clientX;
+      this.mouse.y = e.clientY;
+    };
+    window.addEventListener('mousemove', this.mouseMoveHandler);
   }
 }
 
@@ -124,17 +135,28 @@ class Particle {
     this.accX = 0;
     this.accY = 0;
     this.friction = Math.random() * 0.05 + 0.94;
-    this.speed = 1000; // Hardcoded speed (lower = faster)
-    this.color = parent.getAttribute('particle-color') || '#FFD700'; // Golden
+    this.speed = 200; // Hardcoded faster speed
+    this.color = parent.getAttribute('particle-color') || '#66D9EF'; // Soft cyan
   }
 
-  render(ctx) {
+  render(ctx, mouse, radius) {
     this.accX = (this.dest.x - this.x) / this.speed;
     this.accY = (this.dest.y - this.y) / this.speed;
     this.vx += this.accX;
     this.vy += this.accY;
     this.vx *= this.friction;
     this.vy *= this.friction;
+
+    // Mouse interaction
+    const a = this.x - mouse.x;
+    const b = this.y - mouse.y;
+    const distance = Math.sqrt(a * a + b * b);
+    if (distance < radius) {
+      this.accX = (this.x - mouse.x) / 100;
+      this.accY = (this.y - mouse.y) / 100;
+      this.vx += this.accX;
+      this.vy += this.accY;
+    }
 
     this.x += this.vx;
     this.y += this.vy;
