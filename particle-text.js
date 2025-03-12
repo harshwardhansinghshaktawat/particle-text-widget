@@ -8,10 +8,7 @@ class ParticleText extends HTMLElement {
   }
 
   static get observedAttributes() {
-    return [
-      'text', 'particle-speed', 'particle-density', 'particle-color',
-      'font-size', 'background-color', 'text-color', 'font-family'
-    ];
+    return ['text', 'font-size', 'background-color', 'particle-color', 'text-color', 'font-family'];
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
@@ -34,7 +31,7 @@ class ParticleText extends HTMLElement {
     const text = this.getAttribute('text') || 'Shine';
     const fontSize = parseFloat(this.getAttribute('font-size')) || 5; // In vw
     const fontFamily = this.getAttribute('font-family') || 'Cinzel';
-    const density = parseFloat(this.getAttribute('particle-density')) || 450; // Higher number = fewer particles
+    const density = 450; // Hardcoded density (higher = fewer particles)
 
     ctx.clearRect(0, 0, ww, wh);
     ctx.font = `400 ${fontSize}vw ${fontFamily}, serif`;
@@ -73,7 +70,7 @@ class ParticleText extends HTMLElement {
     // Get attribute values with fallbacks
     const backgroundColor = this.getAttribute('background-color') || '#1A2533'; // Midnight blue
     const textColor = this.getAttribute('text-color') || '#D8DEE9'; // Soft silver
-    const particleColor = this.getAttribute('particle-color') || '#FFD700'; // Golden (single color for simplicity)
+    const particleColor = this.getAttribute('particle-color') || '#FFD700'; // Golden
 
     // Inject HTML and CSS into shadow DOM
     this.shadowRoot.innerHTML = `
@@ -127,8 +124,8 @@ class Particle {
     this.accX = 0;
     this.accY = 0;
     this.friction = Math.random() * 0.05 + 0.94;
-    this.speed = parseFloat(parent.getAttribute('particle-speed')) || 1000; // Lower = faster
-    this.color = parent.getAttribute('particle-color') || '#FFD700'; // Default golden
+    this.speed = 1000; // Hardcoded speed (lower = faster)
+    this.color = parent.getAttribute('particle-color') || '#FFD700'; // Golden
   }
 
   render(ctx) {
