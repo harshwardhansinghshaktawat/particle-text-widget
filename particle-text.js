@@ -40,7 +40,10 @@ class ParticleText extends HTMLElement {
     ctx.clearRect(0, 0, ww, wh);
     ctx.font = `400 ${fontSize}vw ${fontFamily}, serif`;
     ctx.textAlign = 'center';
-    ctx.fillText(text, ww / 2, wh / 2);
+    ctx.textBaseline = 'middle'; // Ensure vertical centering
+    const centerX = ww / 2;
+    const centerY = wh / 2;
+    ctx.fillText(text, centerX, centerY);
 
     const data = ctx.getImageData(0, 0, ww, wh).data;
     ctx.clearRect(0, 0, ww, wh);
@@ -90,6 +93,7 @@ class ParticleText extends HTMLElement {
         canvas {
           width: 100%;
           height: 100%;
+          display: block; /* Ensure no extra spacing */
         }
       </style>
       <canvas></canvas>
