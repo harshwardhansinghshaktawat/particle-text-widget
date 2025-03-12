@@ -5,8 +5,8 @@ class ParticleText extends HTMLElement {
     this.particles = [];
     this.amount = 0;
     this.animationFrameId = null;
-    this.mouse = { x: -9999, y: -9999 }; // Default off-screen
-    this.radius = 70; // Mouse interaction radius
+    this.mouse = { x: -9999, y: -9999 };
+    this.radius = 70;
   }
 
   static get observedAttributes() {
@@ -31,19 +31,47 @@ class ParticleText extends HTMLElement {
     window.removeEventListener('resize', this.resizeHandler);
   }
 
+  wrapText(ctx, text, fontSize, maxWidth) {
+    ctx.font = `400 ${fontSize}vw ${this.getAttribute('font-family') || 'Cinzel'}, serif`;
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = words[0];
+
+    for (let i = 1; i < words.length; i++) {
+      const testLine = currentLine + ' ' + words[i];
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width <= maxWidth) {
+        currentLine = testLine;
+      } else {
+        lines.push(currentLine);
+        currentLine = words[i];
+      }
+    }
+    lines.push(currentLine);
+    return lines;
+  }
+
   initParticles(ctx, ww, wh) {
     const text = this.getAttribute('text') || 'Shine';
     const fontSize = parseFloat(this.getAttribute('font-size')) || 5; // In vw
-    const fontFamily = this.getAttribute('font-family') || 'Cinzel';
     const density = 450; // Hardcoded density
+    const maxWidth = ww * 0.8; // 80% of canvas width for wrapping
 
     ctx.clearRect(0, 0, ww, wh);
-    ctx.font = `400 ${fontSize}vw ${fontFamily}, serif`;
+    const lines = this.wrapText(ctx, text, fontSize, maxWidth);
+
+    // Calculate total height and center vertically
+    const lineHeight = fontSize * window.innerWidth / 100 * 1.2; // 1.2x font size for line spacing
+    const totalHeight = lines.length * lineHeight;
+    const startY = (wh - totalHeight) / 2;
+
+    // Draw each line
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle'; // Ensure vertical centering
-    const centerX = ww / 2;
-    const centerY = wh / 2;
-    ctx.fillText(text, centerX, centerY);
+    ctx.textBaseline = 'middle';
+    lines.forEach((line, index) => {
+      const y = startY + (index * lineHeight) + (lineHeight / 2);
+      ctx.fillText(line, ww / 2, y);
+    });
 
     const data = ctx.getImageData(0, 0, ww, wh).data;
     ctx.clearRect(0, 0, ww, wh);
@@ -93,7 +121,7 @@ class ParticleText extends HTMLElement {
         canvas {
           width: 100%;
           height: 100%;
-          display: block; /* Ensure no extra spacing */
+          display: block;
         }
       </style>
       <canvas></canvas>
@@ -133,14 +161,14 @@ class Particle {
     this.x = Math.random() * window.innerWidth;
     this.y = Math.random() * window.innerHeight;
     this.dest = { x, y };
-    this.r = Math.random() * 1 + 1; // Particle radius
+    this.r = Math.random() * 1 + 1;
     this.vx = (Math.random() - 0.5) * 20;
     this.vy = (Math.random() - 0.5) * 20;
     this.accX = 0;
     this.accY = 0;
     this.friction = Math.random() * 0.05 + 0.94;
     this.speed = 200; // Hardcoded faster speed
-    this.color = parent.getAttribute('particle-color') || '#66D9EF'; // Soft cyan
+    this.color = parent.getAttribute('particle-color') || '#66D9EF';
   }
 
   render(ctx, mouse, radius) {
