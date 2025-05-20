@@ -7,6 +7,8 @@ class ParticleText extends HTMLElement {
     this.animationFrameId = null;
     this.mouse = { x: -9999, y: -9999 };
     this.radius = 70;
+    this.isVisible = false;
+    this.isInitialized = false;
   }
 
   static get observedAttributes() {
@@ -21,14 +23,55 @@ class ParticleText extends HTMLElement {
 
   connectedCallback() {
     this.render();
+    this.setupIntersectionObserver();
   }
 
   disconnectedCallback() {
-    if (this.animationFrameId) {
-      cancelAnimationFrame(this.animationFrameId);
-    }
+    this.stopAnimation();
     window.removeEventListener('mousemove', this.mouseMoveHandler);
     window.removeEventListener('resize', this.resizeHandler);
+    
+    // Disconnect intersection observer
+    if (this.observer) {
+      this.observer.disconnect();
+    }
+  }
+
+  setupIntersectionObserver() {
+    // Create new IntersectionObserver
+    this.observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          // Element entered viewport
+          this.isVisible = true;
+          if (this.isInitialized) {
+            this.startAnimation();
+          }
+        } else {
+          // Element left viewport
+          this.isVisible = false;
+          this.stopAnimation();
+        }
+      });
+    }, {
+      threshold: 0.1 // Trigger when at least 10% of the element is visible
+    });
+
+    // Start observing this element
+    this.observer.observe(this);
+  }
+
+  startAnimation() {
+    if (!this.animationFrameId && this.isVisible) {
+      this.renderAnimation();
+    }
+  }
+
+  stopAnimation() {
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
   }
 
   wrapText(ctx, text, fontSize, maxWidth) {
@@ -85,6 +128,12 @@ class ParticleText extends HTMLElement {
       }
     }
     this.amount = this.particles.length;
+    this.isInitialized = true;
+    
+    // Start animation if element is visible
+    if (this.isVisible) {
+      this.startAnimation();
+    }
   }
 
   renderAnimation() {
@@ -98,7 +147,11 @@ class ParticleText extends HTMLElement {
       this.particles[i].render(ctx, this.mouse, this.radius);
     }
 
-    this.animationFrameId = requestAnimationFrame(() => this.renderAnimation());
+    if (this.isVisible) {
+      this.animationFrameId = requestAnimationFrame(() => this.renderAnimation());
+    } else {
+      this.animationFrameId = null;
+    }
   }
 
   render() {
@@ -133,8 +186,6 @@ class ParticleText extends HTMLElement {
 
     const ctx = canvas.getContext('2d');
     this.initParticles(ctx, canvas.width, canvas.height);
-    if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
-    this.renderAnimation();
 
     // Handle resize
     window.removeEventListener('resize', this.resizeHandler);
